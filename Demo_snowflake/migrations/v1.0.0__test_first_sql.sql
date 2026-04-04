@@ -1,7 +1,7 @@
-use database APPSDB;
+use database APPDB;
 use schema APPS;
 use warehouse APP_WH;
-use role accountadmin;
+use role ACCOUNTADMIN;
 --create table ddl
 create table if not exists test_deployment_1
 (
