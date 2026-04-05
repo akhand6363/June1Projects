@@ -7,30 +7,35 @@ on:
       - "Demo_snowflake/migrations/**"
       - "Demo_snowflake/config/**"
       - ".github/workflows/snowflake-devops.yml"
+
   workflow_dispatch:
     inputs:
-      env:
-        description: "Target environment config name (dev/uat/prod)"
+      target_env:
+        description: "Target environment (dev/sit/uat/prod)"
         required: true
         default: "dev"
 
 jobs:
-  deploy-snowflake-changes:
+  deploy:
     runs-on: ubuntu-latest
 
+    # ✅ This is the key: attach the job to a GitHub Environment
+    # so environment-level vars/secrets are available. [1](https://stackoverflow.com/questions/60176044/how-do-i-use-an-env-file-with-github-actions)[2](https://johntrue15.github.io/2025/01/01/Blog-1/)
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target_env || 'dev' }}
+
     env:
-      # Select environment: default dev for push, or workflow_dispatch input for manual run
-      ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dev' }}
+      # The env name also chooses which config file to use: Demo_snowflake/config/<env>.yml
+      ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.target_env || 'dev' }}
 
-      # ✅ Connection settings from GitHub Variables (non-secret)
-      SNOWFLAKE_ACCOUNT:   ${{ vars.SF_ACCOUNT }}
-      SNOWFLAKE_USER:      ${{ vars.SF_USER }}
-      SNOWFLAKE_ROLE:      ${{ vars.SF_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ vars.SF_WAREHOUSE }}
-      SNOWFLAKE_DATABASE:  ${{ vars.SF_DATABASE }}
+      # ✅ Pull from GitHub Environment variables (or repo variables if you also define them)
+      SNOWFLAKE_ACCOUNT:   ${{ vars.SF_ACCOUNT }}    # [3](https://pypi.org/project/db-schemachange/)
+      SNOWFLAKE_USER:      ${{ vars.SF_USER }}       # [3](https://pypi.org/project/db-schemachange/)
+      SNOWFLAKE_ROLE:      ${{ vars.SF_ROLE }}       # [3](https://pypi.org/project/db-schemachange/)
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SF_WAREHOUSE }}  # [3](https://pypi.org/project/db-schemachange/)
+      SNOWFLAKE_DATABASE:  ${{ vars.SF_DATABASE }}   # [3](https://pypi.org/project/db-schemachange/)
 
-      # ✅ Password/token from GitHub Secrets (secret)
-      SNOWFLAKE_PASSWORD:  ${{ secrets.SF_PASSWORD }}
+      # ✅ Pull from GitHub Environment secret
+      SNOWFLAKE_PASSWORD:  ${{ secrets.Sf_PASSWORD }} # [2](https://johntrue15.github.io/2025/01/01/Blog-1/)[1](https://stackoverflow.com/questions/60176044/how-do-i-use-an-env-file-with-github-actions)
 
     steps:
       - name: Checkout repository
@@ -46,42 +51,27 @@ jobs:
           python --version
           pip install --upgrade schemachange
 
-      - name: Validate folders + config file exist
+      - name: Validate config file exists
         run: |
-          echo "Repo root:"
-          pwd
-          echo "ENV=${ENV}"
-
-          echo "Listing Demo_snowflake:"
-          ls -la Demo_snowflake || true
-
-          echo "Listing config:"
-          ls -la Demo_snowflake/config || true
-
-          echo "Listing migrations:"
-          ls -la Demo_snowflake/migrations || true
-
+          echo "Target ENV: $ENV"
           test -f "Demo_snowflake/config/${ENV}.yml" || (echo "Missing Demo_snowflake/config/${ENV}.yml" && exit 1)
 
-      - name: Sanity check required env vars (non-secret only)
+      - name: Sanity check required env vars (non-secret)
         run: |
-          echo "SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT}"
-          echo "SNOWFLAKE_USER=${SNOWFLAKE_USER}"
-          echo "SNOWFLAKE_ROLE=${SNOWFLAKE_ROLE}"
-          echo "SNOWFLAKE_WAREHOUSE=${SNOWFLAKE_WAREHOUSE}"
-          echo "SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE}"
+          echo "SNOWFLAKE_ACCOUNT=$SNOWFLAKE_ACCOUNT"
+          echo "SNOWFLAKE_USER=$SNOWFLAKE_USER"
+          echo "SNOWFLAKE_ROLE=$SNOWFLAKE_ROLE"
+          echo "SNOWFLAKE_WAREHOUSE=$SNOWFLAKE_WAREHOUSE"
+          echo "SNOWFLAKE_DATABASE=$SNOWFLAKE_DATABASE"
 
           if [ -z "$SNOWFLAKE_USER" ]; then
-            echo "ERROR: SNOWFLAKE_USER is empty. Set vars.SNOWFLAKE_USER in GitHub Variables."
+            echo "ERROR: SNOWFLAKE_USER is empty. Ensure the job environment (dev/sit/uat/prod) has that variable set."
             exit 1
           fi
 
-      - name: (Optional) Verify connection
+      - name: Deploy with schemachange
         run: |
-          schemachange verify -f Demo_snowflake/migrations
-
-      - name: Deploy via schemachange
-        run: |
+          # schemachange recommends env vars for CI/CD auth/connection [4](https://github.com/Interfolio/snowchange)
           schemachange deploy \
             -f Demo_snowflake/migrations \
             --config-folder Demo_snowflake/config \
