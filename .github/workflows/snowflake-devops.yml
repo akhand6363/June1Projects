@@ -23,14 +23,14 @@ jobs:
       ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dev' }}
 
       # ✅ Connection settings from GitHub Variables (non-secret)
-      SNOWFLAKE_ACCOUNT:   ${{ vars.SNOWFLAKE_ACCOUNT }}
-      SNOWFLAKE_USER:      ${{ vars.SNOWFLAKE_USER }}
-      SNOWFLAKE_ROLE:      ${{ vars.SNOWFLAKE_ROLE }}
-      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
-      SNOWFLAKE_DATABASE:  ${{ vars.SNOWFLAKE_DATABASE }}
+      SNOWFLAKE_ACCOUNT:   ${{ vars.SF_ACCOUNT }}
+      SNOWFLAKE_USER:      ${{ vars.SF_USER }}
+      SNOWFLAKE_ROLE:      ${{ vars.SF_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SF_WAREHOUSE }}
+      SNOWFLAKE_DATABASE:  ${{ vars.SF_DATABASE }}
 
       # ✅ Password/token from GitHub Secrets (secret)
-      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_PASSWORD:  ${{ secrets.SF_PASSWORD }}
 
     steps:
       - name: Checkout repository
