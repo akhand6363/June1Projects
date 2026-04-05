@@ -1,0 +1,85 @@
+name: snowflake-devops-demo
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "migrations/**"
+      - "config/**"
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Target environment (dev/uat/prod) -> selects config/<env>.yml"
+        required: true
+        default: "dev"
+
+jobs:
+  deploy-snowflake-changes:
+    runs-on: ubuntu-latest
+
+    # ENV defaults to "dev" on push, and uses workflow_dispatch input when manually triggered
+    env:
+      ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dev' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install schemachange + YAML parser
+        run: |
+          python --version
+          pip install --upgrade schemachange pyyaml
+
+      - name: Validate environment config file exists
+        run: |
+          echo "Selected ENV: ${ENV}"
+          ls -la ./config
+          test -f "./config/${ENV}.yml" || (echo "Missing ./config/${ENV}.yml" && exit 1)
+
+      - name: Export SNOWFLAKE_* values from config/${ENV}.yml (non-secrets)
+        run: |
+          python - <<'PY'
+          import os
+          import yaml
+
+          env = os.environ["ENV"]
+          path = f"./config/{env}.yml"
+
+          with open(path, "r") as f:
+            cfg = yaml.safe_load(f) or {}
+
+          # Only load non-secret connection settings from config
+          keys = [
+            "SNOWFLAKE_ACCOUNT",
+            "SNOWFLAKE_USER",
+            "SNOWFLAKE_ROLE",
+            "SNOWFLAKE_WAREHOUSE",
+            "SNOWFLAKE_DATABASE",
+          ]
+
+          with open(os.environ["GITHUB_ENV"], "a") as out:
+            for k in keys:
+              v = cfg.get(k)
+              if v is not None and str(v).strip() != "":
+                out.write(f"{k}={v}\n")
+          PY
+
+      - name: Run schemachange deploy
+        env:
+          # Keep the password/token protected (recommended for CI/CD) [1](https://github.com/Snowflake-Labs/schemachange)
+          SNOWFLAKE_PASSWORD: ${{ secrets.SF_PASSWORD }}
+        run: |
+          echo "Using config file: ./config/${ENV}.yml"
+          echo "Using migrations folder: ./migrations"
+
+          # schemachange deploy is the modern command-based interface [1](https://github.com/Snowflake-Labs/schemachange)
+          schemachange deploy \
+            -f ./migrations \
+            --config-folder ./config \
+            --config-file-name "${ENV}.yml" \
+            --create-change-history-table
