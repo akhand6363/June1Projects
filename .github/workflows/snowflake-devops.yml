@@ -6,10 +6,11 @@ on:
     paths:
       - "Demo_snowflake/migrations/**"
       - "Demo_snowflake/config/**"
+      - ".github/workflows/snowflake-devops.yml"
   workflow_dispatch:
     inputs:
       env:
-        description: "Target environment (dev/uat/prod) -> selects Demo_snowflake/config/<env>.yml"
+        description: "Target environment config name (dev/uat/prod)"
         required: true
         default: "dev"
 
@@ -18,7 +19,18 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # Select environment: default dev for push, or workflow_dispatch input for manual run
       ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.env || 'dev' }}
+
+      # ✅ Connection settings from GitHub Variables (non-secret)
+      SNOWFLAKE_ACCOUNT:   ${{ vars.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER:      ${{ vars.SNOWFLAKE_USER }}
+      SNOWFLAKE_ROLE:      ${{ vars.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_WAREHOUSE: ${{ vars.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_DATABASE:  ${{ vars.SNOWFLAKE_DATABASE }}
+
+      # ✅ Password/token from GitHub Secrets (secret)
+      SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
 
     steps:
       - name: Checkout repository
@@ -29,44 +41,46 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install schemachange + yaml parser
+      - name: Install schemachange
         run: |
           python --version
-          pip install --upgrade schemachange pyyaml
+          pip install --upgrade schemachange
 
-      - name: Debug - show folders
+      - name: Validate folders + config file exist
         run: |
+          echo "Repo root:"
           pwd
-          ls -la
+          echo "ENV=${ENV}"
+
+          echo "Listing Demo_snowflake:"
           ls -la Demo_snowflake || true
+
+          echo "Listing config:"
           ls -la Demo_snowflake/config || true
+
+          echo "Listing migrations:"
           ls -la Demo_snowflake/migrations || true
 
-      - name: Validate config exists
-        run: |
           test -f "Demo_snowflake/config/${ENV}.yml" || (echo "Missing Demo_snowflake/config/${ENV}.yml" && exit 1)
 
-      - name: Export SNOWFLAKE_* values from config (non-secrets)
+      - name: Sanity check required env vars (non-secret only)
         run: |
-          python - <<'PY'
-          import os, yaml
-          env = os.environ["ENV"]
-          path = f"Demo_snowflake/config/{env}.yml"
-          with open(path, "r") as f:
-              cfg = yaml.safe_load(f) or {}
+          echo "SNOWFLAKE_ACCOUNT=${SNOWFLAKE_ACCOUNT}"
+          echo "SNOWFLAKE_USER=${SNOWFLAKE_USER}"
+          echo "SNOWFLAKE_ROLE=${SNOWFLAKE_ROLE}"
+          echo "SNOWFLAKE_WAREHOUSE=${SNOWFLAKE_WAREHOUSE}"
+          echo "SNOWFLAKE_DATABASE=${SNOWFLAKE_DATABASE}"
 
-          keys = ["SNOWFLAKE_ACCOUNT","SNOWFLAKE_USER","SNOWFLAKE_ROLE","SNOWFLAKE_WAREHOUSE","SNOWFLAKE_DATABASE"]
-          with open(os.environ["GITHUB_ENV"], "a") as out:
-              for k in keys:
-                  v = cfg.get(k)
-                  if v is not None and str(v).strip():
-                      out.write(f"{k}={v}\n")
-          PY
+          if [ -z "$SNOWFLAKE_USER" ]; then
+            echo "ERROR: SNOWFLAKE_USER is empty. Set vars.SNOWFLAKE_USER in GitHub Variables."
+            exit 1
+          fi
 
-      - name: Run schemachange deploy
-        env:
-          # Keep password protected (schemachange CI/CD guidance prefers env vars for secrets) [4](https://www.youtube.com/watch?v=nK7PZOrPqkA)[5](https://pypi.org/project/db-schemachange/)
-          SNOWFLAKE_PASSWORD: ${{ secrets.SF_PASSWORD }}
+      - name: (Optional) Verify connection
+        run: |
+          schemachange verify -f Demo_snowflake/migrations
+
+      - name: Deploy via schemachange
         run: |
           schemachange deploy \
             -f Demo_snowflake/migrations \
