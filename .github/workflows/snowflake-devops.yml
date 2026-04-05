@@ -79,7 +79,7 @@ jobs:
 
           # schemachange deploy is the modern command-based interface [1](https://github.com/Snowflake-Labs/schemachange)
           schemachange deploy \
-            -f ./migrations \
-            --config-folder ./config \
+            -f ./Demo_snowflake/migrations \
+            --config-folder ./Demo_snowflake/config \
             --config-file-name "${ENV}.yml" \
             --create-change-history-table
