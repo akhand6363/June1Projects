@@ -4,8 +4,8 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "migrations/**"
-      - "config/**"
+      - "Demo_snowflake/migrations/**"
+      - "Demo_snowflake/config/**"
   workflow_dispatch:
     inputs:
       env:
