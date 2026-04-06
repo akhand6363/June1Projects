@@ -33,6 +33,7 @@ jobs:
       SNOWFLAKE_ROLE:      ${{ vars.SF_ROLE }}       # [3](https://pypi.org/project/db-schemachange/)
       SNOWFLAKE_WAREHOUSE: ${{ vars.SF_WAREHOUSE }}  # [3](https://pypi.org/project/db-schemachange/)
       SNOWFLAKE_DATABASE:  ${{ vars.SF_DATABASE }}   # [3](https://pypi.org/project/db-schemachange/)
+      SNOWFLAKE_SCHEMA:  ${{ vars.SF_SCHEMA }}
 
       # ✅ Pull from GitHub Environment secret
       SNOWFLAKE_PASSWORD:  ${{ secrets.Sf_PASSWORD }} # [2](https://johntrue15.github.io/2025/01/01/Blog-1/)[1](https://stackoverflow.com/questions/60176044/how-do-i-use-an-env-file-with-github-actions)
@@ -63,6 +64,7 @@ jobs:
           echo "SNOWFLAKE_ROLE=$SNOWFLAKE_ROLE"
           echo "SNOWFLAKE_WAREHOUSE=$SNOWFLAKE_WAREHOUSE"
           echo "SNOWFLAKE_DATABASE=$SNOWFLAKE_DATABASE"
+          echo "SNOWFLAKE_SCHEMA=$SNOWFLAKE_SCHEMA"
 
           if [ -z "$SNOWFLAKE_USER" ]; then
             echo "ERROR: SNOWFLAKE_USER is empty. Ensure the job environment (dev/sit/uat/prod) has that variable set."
